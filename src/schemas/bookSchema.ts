@@ -7,3 +7,14 @@ export const createBookSchema = z.object({
   status: z.enum(['planned', 'reading', 'finished']),
   userId: z.string().uuid('Invalid user UUID'),
 });
+
+export const updateBookSchema = z.object({
+  title: z.string().min(1).optional(),
+  author: z.string().min(1).optional(),
+  pages: z.number().int().positive().optional(),
+  status: z.enum(['planned', 'reading', 'finished']).optional(),
+});
+
+export const bookIdParamSchema = z.object({
+  id: z.string().uuid({ message: 'Incorrect UUID format for id' }),
+});

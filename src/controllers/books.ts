@@ -1,66 +1,100 @@
-import { FastifyReply, FastifyRequest } from 'fastify';
-import prisma from '../prisma';
-import { createBookSchema } from '../schemas/bookSchema';
-import { z } from 'zod';
-
-
-
+import { FastifyReply, FastifyRequest } from "fastify";
+import prisma from "../prisma";
+import { createBookSchema } from "../schemas/bookSchema";
+import { updateBookSchema } from "../schemas/bookSchema";
+import { bookIdParamSchema } from '../schemas/bookSchema';
+import { z } from "zod";
 
 export const getAllBooks = async (req: FastifyRequest, reply: FastifyReply) => {
   const books = await prisma.book.findMany();
   return books;
 };
 
-export const getBookById = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-  const book = await prisma.book.findUnique({ where: { id: req.params.id } });
-  if (!book) return reply.code(404).send({ message: 'Book not found' });
-  return book;
+export const getBookById = async (req: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const { id } = bookIdParamSchema.parse(req.params);
+
+    const book = await prisma.book.findUnique({ where: { id } });
+
+    if (!book) {
+      return reply.code(404).send({ message: 'Book not found' });
+    }
+
+    return reply.send(book);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return reply.code(400).send({ message: 'Invalid id parameter', errors: error.errors });
+    }
+    return reply.code(500).send({ message: 'Error while receiving book' });
+  }
 };
 
 export const createBook = async (req: FastifyRequest, reply: FastifyReply) => {
   try {
-    const parsed = createBookSchema.parse(req.body); 
+    const parsed = createBookSchema.parse(req.body);
 
     const book = await prisma.book.create({
-      data: parsed, 
+      data: parsed,
     });
 
     return reply.code(201).send(book);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return reply.code(400).send({
-        message: 'Validation error',
+        message: "Validation error",
         errors: error.errors,
       });
     }
 
-    return reply.code(500).send({ message: 'Something went wrong' });
+    return reply.code(500).send({ message: "Something went wrong" });
   }
 };
 
-export const updateBook = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-  const { title, author, pages, status } = req.body as any;
+export const updateBook = async (req: FastifyRequest, reply: FastifyReply) => {
+  const { id } = req.params as { id: string };
+
   try {
-    const book = await prisma.book.update({
-      where: { id: req.params.id },
-      data: { title, author, pages, status },
+    const parsed = updateBookSchema.parse(req.body);
+
+    const updated = await prisma.book.update({
+      where: { id },
+      data: parsed,
     });
-    return book;
-  } catch {
-    return reply.code(404).send({ message: 'Book not found' });
+
+    return reply.code(200).send(updated);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return reply.code(400).send({
+        message: "Validation error",
+        errors: error.errors,
+      });
+    }
+
+    return reply.code(500).send({ message: "Error updating book" });
   }
 };
 
-export const deleteBook = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+export const deleteBook = async (req: FastifyRequest, reply: FastifyReply) => {
   try {
-    await prisma.book.delete({ where: { id: req.params.id } });
-    return { message: 'The book has been removed.' };
-  } catch {
-    return reply.code(404).send({ message: 'Book not found' });
+    const { id } = bookIdParamSchema.parse(req.params);
+
+    await prisma.book.delete({ where: { id } });
+
+    return reply.code(204).send();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return reply.code(400).send({ message: 'Invalid id parameter', errors: error.errors });
+    }
+    return reply.code(500).send({ message: 'Error deleting book' });
   }
 };
 
-export const getBooksByUser = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-  const books = await prisma.book.findMany({ where: { userId: req.params.id } });
+export const getBooksByUser = async (
+  req: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply
+) => {
+  const books = await prisma.book.findMany({
+    where: { userId: req.params.id },
+  });
   return books;
 };
