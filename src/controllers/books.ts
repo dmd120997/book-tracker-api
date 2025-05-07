@@ -2,7 +2,8 @@ import { FastifyReply, FastifyRequest } from "fastify";
 import prisma from "../prisma";
 import { createBookSchema } from "../schemas/bookSchema";
 import { updateBookSchema } from "../schemas/bookSchema";
-import { bookIdParamSchema } from '../schemas/bookSchema';
+import { bookIdParamSchema } from "../schemas/bookSchema";
+import { validateBody, validateParams } from "../utils/validate";
 import { z } from "zod";
 
 export const getAllBooks = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -11,22 +12,21 @@ export const getAllBooks = async (req: FastifyRequest, reply: FastifyReply) => {
 };
 
 export const getBookById = async (req: FastifyRequest, reply: FastifyReply) => {
-  try {
-    const { id } = bookIdParamSchema.parse(req.params);
+  const params = await validateParams(bookIdParamSchema, req, reply);
+  if (!params) return;
 
-    const book = await prisma.book.findUnique({ where: { id } });
+  const book = await prisma.book.findUnique({
+    where: {
+      id: params.id,
+      userId: req.user.id,
+    },
+  });
 
-    if (!book) {
-      return reply.code(404).send({ message: 'Book not found' });
-    }
-
-    return reply.send(book);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return reply.code(400).send({ message: 'Invalid id parameter', errors: error.errors });
-    }
-    return reply.code(500).send({ message: 'Error while receiving book' });
+  if (!book) {
+    return reply.code(404).send({ message: "Book not found" });
   }
+
+  return reply.send(book);
 };
 
 export const createBook = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -34,7 +34,10 @@ export const createBook = async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = createBookSchema.parse(req.body);
 
     const book = await prisma.book.create({
-      data: parsed,
+      data: {
+        ...parsed,
+        userId: req.user.id,
+      },
     });
 
     return reply.code(201).send(book);
@@ -51,42 +54,50 @@ export const createBook = async (req: FastifyRequest, reply: FastifyReply) => {
 };
 
 export const updateBook = async (req: FastifyRequest, reply: FastifyReply) => {
-  const { id } = req.params as { id: string };
+  const params = await validateParams(bookIdParamSchema, req, reply);
+  if (!params) return;
 
-  try {
-    const parsed = updateBookSchema.parse(req.body);
+  const body = await validateBody(updateBookSchema, req, reply);
+  if (!body) return;
 
-    const updated = await prisma.book.update({
-      where: { id },
-      data: parsed,
-    });
+    const book = await prisma.book.findUnique({
+    where: {
+      id: params.id,
+      userId: req.user.id,
+    },
+  });
 
-    return reply.code(200).send(updated);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return reply.code(400).send({
-        message: "Validation error",
-        errors: error.errors,
-      });
-    }
-
-    return reply.code(500).send({ message: "Error updating book" });
+  if (!book) {
+    return reply.code(404).send({ message: 'Book not found or access denied' });
   }
+
+  const updated = await prisma.book.update({
+    where: { id: params.id },
+    data: body,
+  });
+
+  return reply.send(updated);
 };
 
+
 export const deleteBook = async (req: FastifyRequest, reply: FastifyReply) => {
-  try {
-    const { id } = bookIdParamSchema.parse(req.params);
+  const params = await validateParams(bookIdParamSchema, req, reply);
+  if (!params) return;
 
-    await prisma.book.delete({ where: { id } });
+  const book = await prisma.book.findUnique({
+    where: {
+      id: params.id,
+      userId: req.user.id,
+    },
+  });
 
-    return reply.code(204).send();
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return reply.code(400).send({ message: 'Invalid id parameter', errors: error.errors });
-    }
-    return reply.code(500).send({ message: 'Error deleting book' });
+  if (!book) {
+    return reply.code(404).send({ message: 'Book not found or access denied' });
   }
+
+  await prisma.book.delete({ where: { id: params.id } });
+
+  return reply.code(204).send();
 };
 
 export const getBooksByUser = async (
