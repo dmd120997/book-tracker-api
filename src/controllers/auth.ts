@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { validateBody } from '../utils/validate';
 import { loginSchema, registerSchema } from '../schemas/authSchema';
 import { UserService } from '../services/userService';
+import { getErrorMessage } from '../utils/errors';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
@@ -15,12 +16,8 @@ export const register = async (req: FastifyRequest, reply: FastifyReply) => {
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
     reply.code(201).send({ token, user });
   } catch (err) {
-    if (err instanceof Error) {
-      return reply.code(400).send({ error: err.message });
-    }
-    return reply.code(400).send({ error: 'Unknown error' });
+    return reply.code(400).send({ error: getErrorMessage(err) });
   }
-  
 };
 
 export const login = async (req: FastifyRequest, reply: FastifyReply) => {
